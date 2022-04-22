@@ -1,0 +1,385 @@
+C51 COMPILER V9.59.0.0   MAIN                                                              03/25/2022 16:23:52 PAGE 1   
+
+
+C51 COMPILER V9.59.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: D:\Keil_v5\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main
+                    -.lst) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include "reg52.h"
+   2          #include "iic.h"
+   3          #include "intrins.h"
+   4          
+   5          unsigned char code smg_duan[10] = {0xc0,0xf9,0xa4,0xb0,0x99,0x92,0x82,0xf8,0x80,0x90};
+   6          unsigned int num ;
+   7          unsigned int num1 ;
+   8          unsigned char count ;
+   9          short int canshu = 0;
+  10          unsigned int jishu = 0;
+  11          unsigned char a;   //用于判断是否满足计数
+  12          unsigned char b;   //用来判断L1灯是否点亮
+  13          
+  14          //public enum Num {x1 = 1,x2,x3}x;  哈哈，原来这就是枚举  
+  15          
+  16          sbit R1 = P3^2;
+  17          sbit R2 = P3^3;
+  18          
+  19          sbit M1 = P3^5;
+  20          sbit M2 = P3^4;
+  21          
+  22          sbit L1 = P0^0;
+  23          sbit L2 = P0^1;
+  24          
+  25          void Dat_arrange();
+  26          void SMG_Display(unsigned char dat,unsigned char pos);
+  27          void Key();
+  28          void Canshu_Display();
+  29          void jishu_Display();
+  30          void Voltage_Display();
+  31          
+  32          //***************************************************
+  33          void Delay100us(unsigned int n)         //在11.0592MHz下的延时函数
+  34          {
+  35   1              unsigned char i, j;
+  36   1          for( ; n>0 ;n--)
+  37   1              {
+  38   2              _nop_();
+  39   2              _nop_();
+  40   2              i = 2;
+  41   2              j = 15;
+  42   2              do
+  43   2              {
+  44   3                      while (--j);
+  45   3              } while (--i);
+  46   2              }
+  47   1      }
+  48          
+  49          void Init_138(unsigned char n)    //锁存器选择
+  50          {
+  51   1              switch(n)
+  52   1              {
+  53   2                      case 4 : P2 = (P2 & 0x1f) | 0x80 ;break;
+  54   2                      case 5 : P2 = (P2 & 0x1f) | 0xa0 ;break;
+C51 COMPILER V9.59.0.0   MAIN                                                              03/25/2022 16:23:52 PAGE 2   
+
+  55   2                      case 6 : P2 = (P2 & 0x1f) | 0xc0 ;break;
+  56   2                      case 7 : P2 = (P2 & 0x1f) | 0xe0 ;break;
+  57   2                      case 0 : P2 = (P2 & 0x1f) | 0x00 ;break;
+  58   2              }
+  59   1      }
+  60          
+  61          void SMG_Display(unsigned char dat,unsigned char pos)  //数码管基本显示函数
+  62          {
+  63   1              Init_138(6);
+  64   1              P0 = 0x01 << pos;
+  65   1              Init_138(7);
+  66   1              P0 = dat;
+  67   1              
+  68   1              Delay100us(10);
+  69   1      }
+  70          
+  71          //***************************************************
+  72          
+  73          //******************PCF8591相关函数******************
+  74          void Init_PCF8591()   //初始化PCF8591函数
+  75          {
+  76   1              IIC_Start();
+  77   1              IIC_SendByte(0x90);
+  78   1              IIC_WaitAck();
+  79   1              IIC_SendByte(0x03);
+  80   1              IIC_WaitAck();
+  81   1              IIC_Stop();
+  82   1      }
+  83          
+  84          void Read_PCF8591()    //读取PCF8591的数值
+  85          {
+  86   1              IIC_Start();
+  87   1              IIC_SendByte(0x91);
+  88   1              IIC_WaitAck();
+  89   1              num = IIC_RecByte();
+  90   1              IIC_SendAck(1);
+  91   1              IIC_Stop();
+  92   1      }
+  93          
+  94          //***************************************************
+  95          
+  96          //*****************EEPROM相关函数********************
+  97          void Write_EEPROM(unsigned int dat,unsigned char addr)    //数据写入EEPROM函数
+  98          {
+  99   1              IIC_Start();
+ 100   1              IIC_SendByte(0xa0);
+ 101   1              IIC_WaitAck();
+ 102   1              IIC_SendByte(addr);
+ 103   1              IIC_WaitAck();
+ 104   1              IIC_SendByte(dat);
+ 105   1              IIC_WaitAck();
+ 106   1              IIC_Stop();
+ 107   1      }
+ 108          
+ 109          void Read_EEPROM(unsigned char addr)      //数据从EEPROM中读取函数
+ 110          {
+ 111   1              IIC_Start();
+ 112   1              IIC_SendByte(0xa0);
+ 113   1              IIC_WaitAck();
+ 114   1              IIC_SendByte(addr);
+ 115   1              IIC_WaitAck();
+ 116   1              
+C51 COMPILER V9.59.0.0   MAIN                                                              03/25/2022 16:23:52 PAGE 3   
+
+ 117   1              IIC_Start();
+ 118   1              IIC_SendByte(0xa1);
+ 119   1              IIC_WaitAck();
+ 120   1              canshu = IIC_RecByte();
+ 121   1              IIC_SendAck(1);
+ 122   1              IIC_Stop();
+ 123   1      }
+ 124          
+ 125          //***************************************************
+ 126          
+ 127          void Key()        //按键扫描函数，这里只使用了四个按键
+ 128          {
+ 129   1              R1 = 0;
+ 130   1              R2 = 1 ;
+ 131   1              M1 = M2 =1 ;
+ 132   1              if(M1 == 0)
+ 133   1              {
+ 134   2                      Delay100us(10);
+ 135   2                      if(M1 == 0 )     //S13按键 清零
+ 136   2                      {
+ 137   3                              jishu = 0;      
+ 138   3                      }
+ 139   2              }
+ 140   1              if(M2 == 0)
+ 141   1              {
+ 142   2                      Delay100us(10);
+ 143   2                      if(M2 == 0 )      //S17按键 减
+ 144   2                      {
+ 145   3                              if(count == 1)     //只有在参数页面才能触发
+ 146   3                              {
+ 147   4                              canshu = canshu - 50;
+ 148   4                              if(canshu == -50)
+ 149   4                              {
+ 150   5                                      canshu = 500;
+ 151   5                              }
+ 152   4                              while(M2 == 0)
+ 153   4                              {
+ 154   5                                      Canshu_Display();
+ 155   5                              }
+ 156   4                              
+ 157   4                              }
+ 158   3                      }
+ 159   2              }
+ 160   1              R1 = 1;
+ 161   1              R2 = 0 ;
+ 162   1              M1 = M2 =1 ;
+ 163   1              if(M1 == 0)
+ 164   1              {
+ 165   2                      Delay100us(10);
+ 166   2                      if(M1 == 0 )     //S12按键 显示页面切换
+ 167   2                      {
+ 168   3                              count = count + 1;
+ 169   3                              if(count == 3)
+ 170   3                              {       
+ 171   4                                      count = 0;
+ 172   4                              }
+ 173   3                              while(M1 == 0)
+ 174   3                              {
+ 175   4                                      if(count == 1){Voltage_Display();}
+ 176   4                                      if(count == 2){Canshu_Display();}
+ 177   4                                      if(count == 0){jishu_Display();}
+ 178   4                              }
+C51 COMPILER V9.59.0.0   MAIN                                                              03/25/2022 16:23:52 PAGE 4   
+
+ 179   3                      }
+ 180   2              }
+ 181   1              if(M2 == 0)
+ 182   1              {
+ 183   2                      Delay100us(10);
+ 184   2                      if(M2 == 0 )      //S16按键 加
+ 185   2                      {
+ 186   3                              if(count == 1)    //只有在参数页面才能触发
+ 187   3                              {
+ 188   4                              canshu = canshu + 50 ;
+ 189   4                              if(canshu == 550 )
+ 190   4                              {
+ 191   5                                      canshu = 0;
+ 192   5                              }
+ 193   4                              while(M2 == 0)
+ 194   4                              {
+ 195   5                                      Canshu_Display();
+ 196   5                              }
+ 197   4                          }
+ 198   3                      }
+ 199   2              }
+ 200   1      }
+ 201          
+ 202          void Dat_arrange()      //数据处理，将其转化为电压值
+ 203          {
+ 204   1              num1 = num * 1.961;    //  500 / 255 = 1.961   将数据扩大100倍 
+ 205   1      }
+ 206          
+ 207          void Voltage_Display()               //电压显示
+ 208          {
+ 209   1              Read_PCF8591();
+ 210   1              Dat_arrange();
+ 211   1              SMG_Display(0xc1,0);   //1100 0001
+ 212   1              SMG_Display(smg_duan[num1 / 100]& 0x7f,5);
+ 213   1              SMG_Display(smg_duan[num1 % 100 / 10] ,6);
+ 214   1              SMG_Display(smg_duan[num1 % 10],7);
+ 215   1              SMG_Display(0xff,7);
+ 216   1      }
+ 217          
+ 218          void Canshu_Display()                 //参数显示
+ 219          {
+ 220   1              SMG_Display(0x8c,0);   //    1000 1100
+ 221   1              SMG_Display(smg_duan[canshu / 100]& 0x7f,5);
+ 222   1              SMG_Display(smg_duan[canshu % 100 / 10] ,6);
+ 223   1              SMG_Display(smg_duan[canshu % 10],7);
+ 224   1              SMG_Display(0xff,7);
+ 225   1      }
+ 226          
+ 227          void jishu_Display()                   //计数显示
+ 228          {
+ 229   1              SMG_Display(0xc8,0);   //    1100 1000  
+ 230   1              SMG_Display(smg_duan[jishu / 100],5);
+ 231   1              SMG_Display(smg_duan[jishu % 100 / 10] ,6);
+ 232   1              SMG_Display(smg_duan[jishu % 10],7);
+ 233   1              SMG_Display(0xff,7);
+ 234   1              
+ 235   1      }
+ 236          
+ 237          void Init_Read_canshu()      //参数初始化读取
+ 238          {
+ 239   1              Read_EEPROM(0);
+ 240   1              canshu = canshu * 10;
+C51 COMPILER V9.59.0.0   MAIN                                                              03/25/2022 16:23:52 PAGE 5   
+
+ 241   1      }
+ 242          
+ 243          void count_judgment()        //判断函数
+ 244          {
+ 245   1              if(num1 >= canshu)
+ 246   1              {
+ 247   2                      a = 1;
+ 248   2              }
+ 249   1              if(a == 1)
+ 250   1              {
+ 251   2                      if(num1 < canshu)
+ 252   2                      {
+ 253   3                              jishu = jishu + 1;
+ 254   3                              a = 0;
+ 255   3                      }
+ 256   2              }
+ 257   1              if(jishu % 2 == 0)
+ 258   1              {
+ 259   2                      Init_138(4);
+ 260   2                      L2 = 1;     
+ 261   2              }
+ 262   1              if(jishu % 2 == 1)
+ 263   1              {
+ 264   2                      Init_138(4);
+ 265   2                      L2 = 0;
+ 266   2              }
+ 267   1              if(b == 1)
+ 268   1              {
+ 269   2                      Init_138(4);
+ 270   2                      L1 = 0;
+ 271   2              }
+ 272   1              if(b == 0)
+ 273   1              {
+ 274   2                      Init_138(4);
+ 275   2                      L1 = 1;
+ 276   2              }
+ 277   1      }
+ 278          
+ 279          
+ 280          //*******************定时器函数**********************
+ 281          void Init_Time0()
+ 282          {
+ 283   1              TMOD = 0X01;
+ 284   1              TH0 = (65536-50000)/256;
+ 285   1              TL0 = (65536-50000)%256;
+ 286   1              
+ 287   1              ET0 = 1;
+ 288   1              EA  = 1;
+ 289   1              TR0 = 1;
+ 290   1      }
+ 291          
+ 292          void Serive_Time0() interrupt 1
+ 293          {
+ 294   1              static unsigned int i = 0;
+ 295   1              
+ 296   1              TH0 = (65535 - 50000)/256;
+ 297   1          TL0 = (65535 - 50000)%256;
+ 298   1              
+ 299   1              if(num1 < canshu)
+ 300   1              i++;
+ 301   1              else
+ 302   1              {
+C51 COMPILER V9.59.0.0   MAIN                                                              03/25/2022 16:23:52 PAGE 6   
+
+ 303   2                      b = 0;   //L1 熄灭
+ 304   2                      i = 0;
+ 305   2              } 
+ 306   1              if(i == 100)
+ 307   1              {
+ 308   2                      b = 1;  //L1 点亮
+ 309   2                      i = 0;
+ 310   2              }
+ 311   1      }
+ 312          
+ 313          //***************************************************
+ 314          
+ 315          void main()
+ 316          {
+ 317   1              Init_138(5);
+ 318   1              P0 = 0x00;
+ 319   1              Init_138(4);
+ 320   1              P0 = 0xff;
+ 321   1              Init_PCF8591();
+ 322   1              Init_Read_canshu();
+ 323   1              Init_Time0();
+ 324   1              while(1)
+ 325   1              {
+ 326   2                      switch(count)
+ 327   2                      {
+ 328   3                              case 0 : Key();
+ 329   3                                       Read_PCF8591();
+ 330   3                               Dat_arrange();
+ 331   3                                       count_judgment();
+ 332   3                                       Voltage_Display();
+ 333   3                              break;
+ 334   3                              case 1 : Key();
+ 335   3                                       Read_PCF8591();
+ 336   3                               Dat_arrange();
+ 337   3                                       count_judgment();
+ 338   3                                       Canshu_Display() ; 
+ 339   3                                       Write_EEPROM(canshu * 0.1,0);//参数扩大10倍，由于原参数已扩大100倍，所以这里乘于0.1
+ 340   3                              break;   
+ 341   3                                        
+ 342   3                              case 2 : Key();
+ 343   3                                       Read_PCF8591();
+ 344   3                               Dat_arrange();
+ 345   3                                       count_judgment();
+ 346   3                                       jishu_Display()  ;
+ 347   3                              break;
+ 348   3                      }
+ 349   2              }
+ 350   1      }
+ 351          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1065    ----
+   CONSTANT SIZE    =     10    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     13       4
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
