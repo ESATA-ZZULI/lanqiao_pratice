@@ -1,0 +1,416 @@
+C51 COMPILER V9.59.0.0   MAIN                                                              03/27/2022 15:52:34 PAGE 1   
+
+
+C51 COMPILER V9.59.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: D:\Keil_v5\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main
+                    -.lst) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include "reg52.h"
+   2          #include "iic.h"
+   3          #include "intrins.h"
+   4          
+   5          
+   6          
+   7          unsigned char code smg_duan[] = {0xc0,0xf9,0xa4,0xb0,0x99,0x92,0x82,0xf8,0x80,0x90};
+   8          unsigned char state = 0;
+   9          unsigned char smg_state = 0;
+  10          unsigned char DAC_state = 0;
+  11          unsigned char LED_state = 0;
+  12          unsigned int ADC;
+  13          unsigned int ADC_v;
+  14          long int count_f;
+  15          long int dat_f;
+  16          unsigned char count_t;
+  17          
+  18          sbit S7 = P3^0;
+  19          sbit S6 = P3^1;
+  20          sbit S5 = P3^2;
+  21          sbit S4 = P3^3;
+  22          
+  23          void LED3();
+  24          void LED4();
+  25          
+  26          //****************显示相关函数************************
+  27          void Delay100us(unsigned char n)                //@12.000MHz
+  28          {
+  29   1              unsigned char i, j;
+  30   1          for( ;n>0;n--)
+  31   1              {
+  32   2              i = 2;
+  33   2              j = 39;
+  34   2              do
+  35   2              {
+  36   3                      while (--j);
+  37   3              } while (--i);
+  38   2              }
+  39   1      }
+  40          
+  41          void Init_138(unsigned char n)
+  42          {
+  43   1              switch(n)
+  44   1              {
+  45   2                      case 4 : P2 = (P2 & 0x1f) | 0x80; break ;
+  46   2                      case 5 : P2 = (P2 & 0x1f) | 0xa0; break ;
+  47   2                      case 6 : P2 = (P2 & 0x1f) | 0xc0; break ;
+  48   2                      case 7 : P2 = (P2 & 0x1f) | 0xe0; break ;
+  49   2              }
+  50   1      }
+  51          
+  52          void SMG_Display(unsigned char dat,unsigned char pos)
+  53          {
+  54   1              Init_138(6);
+C51 COMPILER V9.59.0.0   MAIN                                                              03/27/2022 15:52:34 PAGE 2   
+
+  55   1              P0 = 0x01 << pos;
+  56   1              Init_138(7);
+  57   1              P0 = dat;
+  58   1              Delay100us(20);
+  59   1      }
+  60          
+  61          void OFF_SMG_Display()
+  62          {
+  63   1              Init_138(6);
+  64   1              P0 = 0xff;
+  65   1              Init_138(7);
+  66   1              P0 = 0xff;
+  67   1              Delay100us(20);
+  68   1      }
+  69          //**************************************************
+  70          
+  71          //*****************PCF8591相关函数******************
+  72          void Read_PCF8591()         //读取DAC数据
+  73          {
+  74   1              IIC_Start();
+  75   1              IIC_SendByte(0x90);
+  76   1              IIC_WaitAck();
+  77   1              IIC_SendByte(0x43);
+  78   1              IIC_WaitAck();
+  79   1              IIC_Stop();
+  80   1              
+  81   1              IIC_Start();
+  82   1              IIC_SendByte(0x91);
+  83   1              IIC_WaitAck();
+  84   1              ADC = IIC_RecByte();
+  85   1              IIC_SendAck(1);
+  86   1              IIC_Stop();
+  87   1      }
+  88          
+  89          void DAC_PCF8591(unsigned int dat)   //将数据写入，输出电压值
+  90          {
+  91   1              IIC_Start();
+  92   1              IIC_SendByte(0x90);
+  93   1              IIC_WaitAck();
+  94   1              IIC_SendByte(0x40);
+  95   1              IIC_WaitAck();
+  96   1              IIC_SendByte(dat);
+  97   1              IIC_WaitAck();
+  98   1              IIC_Stop();
+  99   1      }
+ 100          
+ 101          //**************************************************
+ 102          
+ 103          //*********************数码管显示*******************
+ 104          void ADC_Display()
+ 105          {
+ 106   1              
+ 107   1              Read_PCF8591();
+ 108   1              
+ 109   1              ADC_v = ADC * 1.961;
+ 110   1              if(smg_state == 0)
+ 111   1              {
+ 112   2              SMG_Display(0xc1,0);             //1100 0001
+ 113   2              SMG_Display(smg_duan[ADC_v /100] & 0x7f,5);
+ 114   2              SMG_Display(smg_duan[ADC_v %100 /10],6);
+ 115   2              SMG_Display(smg_duan[ADC_v % 10],7);
+ 116   2              SMG_Display(0xff,7);
+C51 COMPILER V9.59.0.0   MAIN                                                              03/27/2022 15:52:34 PAGE 3   
+
+ 117   2              }
+ 118   1              else
+ 119   1              {
+ 120   2                      OFF_SMG_Display();
+ 121   2              }
+ 122   1      }
+ 123          
+ 124          void Fre_Display()
+ 125          {
+ 126   1              switch(smg_state)
+ 127   1              {
+ 128   2                      case 0 :
+ 129   2                      {
+ 130   3                              SMG_Display(0x8e,0);             //1000 1110
+ 131   3                              if(dat_f > 99999)
+ 132   3                              {
+ 133   4                              SMG_Display(smg_duan[dat_f /100000],2);
+ 134   4                              }
+ 135   3                              if(dat_f > 9999)
+ 136   3                              {
+ 137   4                                      SMG_Display(smg_duan[dat_f %100000 /10000],3);
+ 138   4                              }
+ 139   3                              if(dat_f > 999)
+ 140   3                              {
+ 141   4                                      SMG_Display(smg_duan[dat_f %10000 /1000],4);
+ 142   4                              }
+ 143   3                              if(dat_f > 99)
+ 144   3                              {
+ 145   4                                      SMG_Display(smg_duan[dat_f %1000 /100],5);
+ 146   4                              }
+ 147   3                              if(dat_f > 9)
+ 148   3                              {
+ 149   4                                      SMG_Display(smg_duan[dat_f %100 /10],6);
+ 150   4                              }
+ 151   3                              SMG_Display(smg_duan[dat_f % 10],7);  
+ 152   3                              SMG_Display(0xff,7);
+ 153   3                      }
+ 154   2                      break;
+ 155   2                      
+ 156   2                      case 1 :
+ 157   2                              OFF_SMG_Display();
+ 158   2                      break;
+ 159   2              }
+ 160   1                      
+ 161   1      }
+ 162          
+ 163          //**************************************************
+ 164          
+ 165          //*****************定时器初始化中断函数*************
+ 166          void Init_Time()
+ 167          {
+ 168   1              TMOD = 0x16;   //T0作为计数 8位自动重装 T1作为计时 16位  0001 0110
+ 169   1              
+ 170   1              TH0 = 0xff;
+ 171   1              TL0 = 0xff;
+ 172   1              
+ 173   1              TH1 = (65535 - 50000)/256;
+ 174   1              TL1 = (65535 - 50000)%256;
+ 175   1              
+ 176   1              EA = 1;
+ 177   1              ET1 = 1;
+ 178   1              ET0 = 1;
+C51 COMPILER V9.59.0.0   MAIN                                                              03/27/2022 15:52:34 PAGE 4   
+
+ 179   1              TR1 = 1;
+ 180   1              TR0 = 1;
+ 181   1      }
+ 182          
+ 183          void Service_Time0() interrupt 1       
+ 184          {
+ 185   1              count_f = count_f + 1;
+ 186   1      }
+ 187          
+ 188          void Service_Time1() interrupt 3
+ 189          {
+ 190   1              TH1 = (65535 - 50000)/256;
+ 191   1              TL1 = (65535 - 50000)%256;
+ 192   1              count_t++;
+ 193   1              if(count_t == 10)
+ 194   1              {
+ 195   2                      dat_f = count_f * 2;
+ 196   2                      count_f = 0;
+ 197   2                      count_t = 0;
+ 198   2              }
+ 199   1      }
+ 200          
+ 201          //**************************************************
+ 202          
+ 203          
+ 204          void key()
+ 205          {
+ 206   1              if(S7 == 0)
+ 207   1              {
+ 208   2                      Delay100us(10);
+ 209   2                      if(S7 == 0)        //S7 按键 数码管显示功能控制
+ 210   2                      {
+ 211   3                              smg_state++;
+ 212   3                              if(smg_state == 2)
+ 213   3                              {
+ 214   4                                      smg_state = 0;
+ 215   4                              }
+ 216   3                              while(S7 == 0)
+ 217   3                              {
+ 218   4                                      if(smg_state == 1){OFF_SMG_Display();}
+ 219   4                              }
+ 220   3                      }
+ 221   2              }
+ 222   1              if(S6 == 0)
+ 223   1              {
+ 224   2                      Delay100us(10);
+ 225   2                      if(S6 == 0)        //S6 按键 LED指示灯功能控制
+ 226   2                      {
+ 227   3                              LED_state++;
+ 228   3                              if(LED_state == 2)
+ 229   3                              {
+ 230   4                                      LED_state = 0;
+ 231   4                              }
+ 232   3                              while(S6 == 0)
+ 233   3                              {
+ 234   4                                      if(state == 1){Fre_Display();}
+ 235   4                                      if(state == 0){ADC_Display();}
+ 236   4                              }
+ 237   3                      }
+ 238   2              }
+ 239   1              if(S5 == 0)
+ 240   1              {
+C51 COMPILER V9.59.0.0   MAIN                                                              03/27/2022 15:52:34 PAGE 5   
+
+ 241   2                      Delay100us(10);
+ 242   2                      if(S5 == 0)        //S5 按键 输出模式切换
+ 243   2                      {
+ 244   3                              DAC_state++;
+ 245   3                              if(DAC_state == 2)
+ 246   3                              {
+ 247   4                                      DAC_state = 0;
+ 248   4                              }
+ 249   3                              while(S5 == 0)
+ 250   3                              {
+ 251   4                                      if(state == 0){ADC_Display();}
+ 252   4                                      if(state == 1){Fre_Display();}
+ 253   4                              }
+ 254   3                      }
+ 255   2              }
+ 256   1              if(S4 == 0)
+ 257   1              {
+ 258   2                      Delay100us(10);
+ 259   2                      if(S4 == 0)        //S4 按键  显示界面切换
+ 260   2                      {
+ 261   3                              state++;
+ 262   3                              if(state == 2)
+ 263   3                              {
+ 264   4                                      state = 0;
+ 265   4                              }
+ 266   3                              while(S4 == 0)
+ 267   3                              {
+ 268   4                                      if(state == 1){ADC_Display();}
+ 269   4                                      if(state == 0){Fre_Display();}
+ 270   4                              }
+ 271   3                      }
+ 272   2              }
+ 273   1      }
+ 274          
+ 275          void Output_DAC_PCF8591()
+ 276          {
+ 277   1              switch(DAC_state)
+ 278   1              {
+ 279   2                      case 0 :
+ 280   2                      {
+ 281   3                              DAC_PCF8591(200*0.51);
+ 282   3                      }
+ 283   2                      break;
+ 284   2                      
+ 285   2                      case 1 :
+ 286   2                      {
+ 287   3                              Read_PCF8591();DAC_PCF8591(ADC);
+ 288   3                      }
+ 289   2                      break;
+ 290   2              }
+ 291   1      }
+ 292          
+ 293          void LedDisplay()
+ 294          {
+ 295   1              switch(LED_state)
+ 296   1              {
+ 297   2                      case 0 :
+ 298   2                      {
+ 299   3                              if(state == 0)
+ 300   3                              {
+ 301   4                                      P0 = 0xfe;  //1111 1110
+ 302   4                                      LED3();
+C51 COMPILER V9.59.0.0   MAIN                                                              03/27/2022 15:52:34 PAGE 6   
+
+ 303   4                              }
+ 304   3                              else
+ 305   3                              {
+ 306   4                                      P0 = 0xfd;
+ 307   4                                      LED4();
+ 308   4                              }
+ 309   3                              
+ 310   3                              if(DAC_state == 0)
+ 311   3                              {
+ 312   4                                      P0 |= 0x10;     //0001 0000
+ 313   4                                      P0 &= 0xfb;     //1111 1011
+ 314   4                              }
+ 315   3                              else
+ 316   3                              {
+ 317   4                                      P0 &= 0xef;
+ 318   4                              }
+ 319   3                              
+ 320   3                              Init_138(4);
+ 321   3                      }
+ 322   2                      break;
+ 323   2                      
+ 324   2                      case 1 :
+ 325   2                      {
+ 326   3                              Init_138(4);
+ 327   3                              P0 = 0xff;
+ 328   3                      }
+ 329   2                      break;
+ 330   2              }
+ 331   1      }
+ 332          
+ 333          void LED3()
+ 334          {
+ 335   1              if(ADC_v < 150)
+ 336   1                      P0 |= 0x04;   // 0000 0100
+ 337   1              else if(ADC_v < 250)
+ 338   1                      P0 &= 0xfb;   // 1111 1011
+ 339   1              else if(ADC_v < 350)
+ 340   1                      P0 |= 0x04;   // 0000 0100
+ 341   1              else
+ 342   1                      P0 &= 0xfb;   // 1111 1011
+ 343   1      }
+ 344          
+ 345          void LED4()
+ 346          {
+ 347   1              if(dat_f < 1000)
+ 348   1                      P0 |= 0x08;   // 0000 1000
+ 349   1              else if(dat_f < 5000)
+ 350   1                      P0 &= 0xf7;   // 1111 0111
+ 351   1              else if(dat_f < 10000)
+ 352   1                      P0 |= 0x08;   // 0000 1000
+ 353   1              else
+ 354   1                      P0 &= 0xf7;   // 1111 0111
+ 355   1      }
+ 356          
+ 357          void Init()
+ 358          {
+ 359   1              Init_138(5);
+ 360   1              P0 = 0x00;
+ 361   1      }
+ 362          
+ 363          void main()
+ 364          {
+C51 COMPILER V9.59.0.0   MAIN                                                              03/27/2022 15:52:34 PAGE 7   
+
+ 365   1              Init();
+ 366   1              Init_Time();
+ 367   1              while(1)
+ 368   1              {
+ 369   2                      switch(state)
+ 370   2                      {
+ 371   3                              case 0 :
+ 372   3                                      ADC_Display();LedDisplay();Output_DAC_PCF8591();key();
+ 373   3                              break;
+ 374   3                              
+ 375   3                              case 1 :
+ 376   3                                      Fre_Display();LedDisplay();Output_DAC_PCF8591();key();
+ 377   3                              break;
+ 378   3                      }
+ 379   2              }
+ 380   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1347    ----
+   CONSTANT SIZE    =     10    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     17       2
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

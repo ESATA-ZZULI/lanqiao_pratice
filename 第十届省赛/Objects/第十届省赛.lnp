@@ -1,0 +1,4 @@
+".\Objects\main.obj",
+".\Objects\iic.obj" 
+TO ".\Objects\第十届省赛" 
+PRINT(".\Listings\第十届省赛.m51") RAMSIZE(256) 
