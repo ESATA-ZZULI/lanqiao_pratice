@@ -1,0 +1,506 @@
+C51 COMPILER V9.60.0.0   MAIN                                                              04/01/2022 15:56:17 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: D:\APP\keil5\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\ma
+                    -in.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <STC15F2K60S2.H>
+   2          #include "onewire.h"
+   3          
+   4          typedef unsigned char uchar;
+   5          typedef unsigned int uint;
+   6          
+   7          sbit L1 = P0^0;
+   8          sbit L2 = P0^1;
+   9          sbit H1 = P3^0;
+  10          sbit H2 = P3^1;
+  11          sbit H3 = P3^2;
+  12          sbit H4 = P3^3;
+  13          sbit R4 = P3^4;
+  14          sbit R3 = P3^5;
+  15          sbit R2 = P4^2;
+  16          sbit R1 = P4^4;
+  17          
+  18          uchar code dpnum[]={0xc0,0xf9,0xa4,0xb0,0x99,0x92,0x82,0xf8,0x80,0x90,0xbf,0xff};
+  19          uchar Tset_Init[4]={0};
+  20          uchar Tset[4]={11,11,11,11};
+  21          uint temperature=0;
+  22          uchar Tmax_Init;
+  23          uchar Tmin_Init;
+  24          uchar Tmaxtemp=30;
+  25          uchar Tmintemp=20;
+  26          uchar Tstate;
+  27          uchar count_t=0;
+  28          uchar LEDstate;
+  29          uchar JDQstate;
+  30          uchar keyword;
+  31          bit Interface = 0;
+  32          uchar Tsetnum=0;
+  33          uchar keycount=5;
+  34          bit keystate = 0;
+  35          
+  36          void System_Init();
+  37          void delayms(uchar ms);
+  38          uint DS18B20_Read();
+  39          void display_bit(uchar pos,uchar dat);
+  40          void display();
+  41          void compare();
+  42          void compare_work();
+  43          void Timer0_Init();
+  44          void key();
+  45          void Face();
+  46          void display_setup();
+  47          
+  48          void main()
+  49          {
+  50   1        System_Init();
+  51   1        Timer0_Init();
+  52   1        while(1)
+  53   1        {
+  54   2          temperature=DS18B20_Read();//注意修改onewire.c里面的延时时间
+C51 COMPILER V9.60.0.0   MAIN                                                              04/01/2022 15:56:17 PAGE 2   
+
+  55   2          compare();
+  56   2          key();
+  57   2          Face();
+  58   2        }
+  59   1      }
+  60          
+  61          void System_Init()
+  62          {
+  63   1        P2 = (P2 & 0x1f) | 0x80;
+  64   1        P0 = 0xff;
+  65   1        P2 = (P2 & 0x1f) | 0xa0;
+  66   1        P0 = 0x00;
+  67   1        P2 = (P2 & 0x1f) | 0xc0;
+  68   1        P0 = 0xff;
+  69   1        P2 = (P2 & 0x1f) | 0xe0;
+  70   1        P0 = 0xff;
+  71   1      }
+  72          void delayms(uchar ms)
+  73          {
+  74   1        uint i,j;
+  75   1        for(i=ms;i>0;i--)
+  76   1          for(j=810;j>0;j--);
+  77   1      }
+  78          void display_bit(uchar pos,uchar dat)
+  79          {
+  80   1        P2 = (P2 & 0x1f) | 0xc0;
+  81   1        P0 = 0x01 << pos;
+  82   1        P2 = (P2 & 0x1f) | 0xe0;
+  83   1        P0 = dat;
+  84   1      }
+  85          void display()
+  86          {
+  87   1        display_bit(0,dpnum[10]);
+  88   1        delayms(1);
+  89   1        display_bit(1,dpnum[Tstate]);
+  90   1        delayms(1);
+  91   1        display_bit(2,dpnum[10]);
+  92   1        delayms(1);
+  93   1        display_bit(3,dpnum[11]);
+  94   1        delayms(1);
+  95   1        display_bit(4,dpnum[11]);
+  96   1        delayms(1);
+  97   1        display_bit(5,dpnum[11]);
+  98   1        delayms(1);
+  99   1        display_bit(6,dpnum[temperature/10]);
+ 100   1        delayms(1);
+ 101   1        display_bit(7,dpnum[temperature%10]);
+ 102   1        delayms(1);
+ 103   1        P2 = (P2 & 0x1f) | 0xc0;
+ 104   1        P0 = 0xff;
+ 105   1        P2 = (P2 & 0x1f) | 0xe0;
+ 106   1        P0 = 0xff;
+ 107   1      }
+ 108          uint DS18B20_Read()
+ 109          {
+ 110   1        uchar LSB,MSB;
+ 111   1        uint temp;
+ 112   1        init_ds18b20(); //复位
+ 113   1        Write_DS18B20(0xcc);//跳过ROM指令
+ 114   1        Write_DS18B20(0x44);//开始温度转换
+ 115   1        
+ 116   1        delayms(1);
+C51 COMPILER V9.60.0.0   MAIN                                                              04/01/2022 15:56:17 PAGE 3   
+
+ 117   1        
+ 118   1        init_ds18b20(); //复位
+ 119   1        Write_DS18B20(0xcc);//跳过ROM指令
+ 120   1        Write_DS18B20(0xbe);//读取高速暂存器
+ 121   1        
+ 122   1        LSB=Read_DS18B20();
+ 123   1        MSB=Read_DS18B20();
+ 124   1        init_ds18b20(); //复位
+ 125   1        
+ 126   1        temp=(MSB << 8) | LSB;
+ 127   1        temp >>= 4; //取整数
+ 128   1        
+ 129   1        return temp;
+ 130   1      }
+ 131          void compare()
+ 132          {
+ 133   1        if(temperature<Tmin_Init)
+ 134   1          Tstate=0;
+ 135   1        else if(temperature>=Tmin_Init && temperature<=Tmax_Init)
+ 136   1          Tstate=1;
+ 137   1        else if(temperature>Tmax_Init)
+ 138   1          Tstate=2;
+ 139   1        compare_work();
+ 140   1      }
+ 141          void compare_work()
+ 142          {
+ 143   1        switch(Tstate)
+ 144   1        {
+ 145   2          case 0:
+ 146   2            P2 = (P2 & 0x1f) | 0xa0;
+ 147   2            P0 = 0x00;
+ 148   2            break;
+ 149   2          case 1:
+ 150   2            P2 = (P2 & 0x1f) | 0xa0;
+ 151   2            P0 = 0x00;
+ 152   2            break;
+ 153   2          case 2:
+ 154   2            P2 = (P2 & 0x1f) | 0xa0;
+ 155   2            P0 = 0x10;
+ 156   2            break;
+ 157   2        }
+ 158   1      }
+ 159          void Timer0_Init()
+ 160          {
+ 161   1        TMOD = 0X01;
+ 162   1        TH0 = (65536-10000)/256;
+ 163   1        TL0 = (65536-10000)%256;
+ 164   1        TR0 = 1;
+ 165   1        TF0 = 0;
+ 166   1        ET0 = 1;
+ 167   1        EA = 1;
+ 168   1      }
+ 169          //void Timer0() interrupt 1
+ 170          //{
+ 171          //  TH0 = (65536-10000)/256;
+ 172          //  TL0 = (65536-10000)%256;
+ 173          //  count_t++;
+ 174          //  if(count_t==20)
+ 175          //  {
+ 176          //    TF0 = 1;
+ 177          //    count_t=0;
+ 178          //    P2 = (P2 & 0x1f) | 0x80;
+C51 COMPILER V9.60.0.0   MAIN                                                              04/01/2022 15:56:17 PAGE 4   
+
+ 179          //    P0 |= 0xfe;
+ 180          //    L1 = ~L1;
+ 181          //    LEDstate = L1;
+ 182          //    TF0 = 0;
+ 183          //}
+ 184          //}
+ 185          void Timer0() interrupt 1
+ 186          {
+ 187   1        TH0 = (65536-10000)/256;
+ 188   1        TL0 = (65536-10000)%256;
+ 189   1        count_t++;
+ 190   1      //  P2 = (P2 & 0x1f) | 0x80;
+ 191   1      //  P0 |= (0xfe|LEDstate);
+ 192   1      //  P0 |= 0xff;
+ 193   1      //  L1 = LEDstate;
+ 194   1        if(count_t>40)
+ 195   1          count_t=0;
+ 196   1        switch(Tstate)
+ 197   1        {
+ 198   2          case 2:
+ 199   2            if(count_t==10)
+ 200   2            {
+ 201   3              TF0 = 1;
+ 202   3              count_t=0;
+ 203   3              P2 = (P2 & 0x1f) | 0x80;
+ 204   3              P0 |= 0xff;
+ 205   3              L1 = ~L1;
+ 206   3              LEDstate = L1;
+ 207   3              TF0 = 0;
+ 208   3            }
+ 209   2            break;
+ 210   2          case 1:
+ 211   2            if(count_t==20)//定时器产生时间不准确，应该是受其他地方寄存器影响,可以在期望值基础上加上50ms左右
+ 212   2            {
+ 213   3      //        count_t=0;
+ 214   3      //        L1 = ~L1;
+ 215   3      //        LEDstate = L1;
+ 216   3              TF0 = 1;
+ 217   3              count_t=0;
+ 218   3              P2 = (P2 & 0x1f) | 0x80;
+ 219   3              P0 |= 0xfe;
+ 220   3              L1 = ~L1;
+ 221   3              LEDstate = L1;
+ 222   3              TF0 = 0;
+ 223   3            }
+ 224   2            break;
+ 225   2          case 0:
+ 226   2            if(count_t==40)
+ 227   2            {
+ 228   3              count_t=0;
+ 229   3      //        TF0 = 1;
+ 230   3      //        P2 = (P2 & 0x1f) | 0x80;
+ 231   3      //        P0 |= 0xfe;
+ 232   3              L1 = ~L1;
+ 233   3              LEDstate = L1;
+ 234   3            }
+ 235   2            break;  
+ 236   2        }
+ 237   1      //  switch(Tstate)
+ 238   1      //  {
+ 239   1      //    case 2:
+ 240   1      //      if(count_t==10)
+C51 COMPILER V9.60.0.0   MAIN                                                              04/01/2022 15:56:17 PAGE 5   
+
+ 241   1      //        TF0 = 1;
+ 242   1      //      break;
+ 243   1      //    case 1:
+ 244   1      //      if(count_t==20)
+ 245   1      //        TF0 = 1;
+ 246   1      //      break;
+ 247   1      //    case 0:
+ 248   1      //      if(count_t==40)
+ 249   1      //        TF0 = 1;
+ 250   1      //      break;  
+ 251   1      //  }
+ 252   1      //  if(TF0 == 1)
+ 253   1      //  {
+ 254   1      //    count_t=0;
+ 255   1      ////    P2 = (P2 & 0x1f) | 0x80;
+ 256   1      ////    P0 |= 0xff;
+ 257   1      //    L1 = ~L1;
+ 258   1      //    LEDstate = L1;
+ 259   1      //    TF0 = 0;
+ 260   1      //  }
+ 261   1      }
+ 262          void key()
+ 263          {
+ 264   1        keystate = 0;
+ 265   1        R1 = 0;
+ 266   1        R2 = R3 = R4 = 1;
+ 267   1        H1 = H2 = H3 = H4 = 1;
+ 268   1        if(H1 == 0)
+ 269   1        {
+ 270   2          delayms(5);
+ 271   2          if(H1 == 0)
+ 272   2          {
+ 273   3            keyword=0;
+ 274   3            keystate = 1;
+ 275   3            while(H1==0);
+ 276   3          }
+ 277   2        }
+ 278   1        else if(H2 == 0)
+ 279   1        {
+ 280   2          delayms(5);
+ 281   2          if(H2 == 0)
+ 282   2          {
+ 283   3            keyword=3;
+ 284   3            keystate = 1;
+ 285   3            while(H2==0);
+ 286   3          }
+ 287   2        }
+ 288   1        else if(H3 == 0)
+ 289   1        {
+ 290   2          delayms(5);
+ 291   2          if(H3 == 0)
+ 292   2          {
+ 293   3            keyword=6;
+ 294   3            keystate = 1;
+ 295   3            while(H3==0);
+ 296   3          }
+ 297   2        }
+ 298   1        else if(H4 == 0)
+ 299   1        {
+ 300   2          delayms(5);
+ 301   2          if(H4 == 0)
+ 302   2          {
+C51 COMPILER V9.60.0.0   MAIN                                                              04/01/2022 15:56:17 PAGE 6   
+
+ 303   3            keyword=9;
+ 304   3            keystate = 1;
+ 305   3            while(H4==0);
+ 306   3          }
+ 307   2        }
+ 308   1        R2 = 0;
+ 309   1        R1 = R3 = R4 = 1;
+ 310   1        H1 = H2 = H3 = H4 = 1;
+ 311   1        if(H1 == 0)
+ 312   1        {
+ 313   2          delayms(5);
+ 314   2          if(H1 == 0)
+ 315   2          {
+ 316   3            keyword=1;
+ 317   3            keystate = 1;
+ 318   3            while(H1==0);
+ 319   3          }
+ 320   2        }
+ 321   1        else if(H2 == 0)
+ 322   1        {
+ 323   2          delayms(5);
+ 324   2          if(H2 == 0)
+ 325   2          {
+ 326   3            keyword=4;
+ 327   3            keystate = 1;
+ 328   3            while(H2==0);
+ 329   3          }
+ 330   2        }
+ 331   1        else if(H3 == 0)
+ 332   1        {
+ 333   2          delayms(5);
+ 334   2          if(H3 == 0)
+ 335   2          {
+ 336   3            keyword=7;
+ 337   3            keystate = 1;
+ 338   3            while(H3==0);
+ 339   3          }
+ 340   2        }
+ 341   1        else if(H4 == 0)
+ 342   1        {
+ 343   2          delayms(5);
+ 344   2          if(H4 == 0)
+ 345   2          {
+ 346   3            Interface=~Interface;
+ 347   3            while(H4==0);
+ 348   3          }
+ 349   2        }
+ 350   1        R3 = 0;
+ 351   1        R1 = R2 = R4 = 1;
+ 352   1        H1 = H2 = H3 = H4 = 1;
+ 353   1        if(H1 == 0)
+ 354   1        {
+ 355   2          delayms(5);
+ 356   2          if(H1 == 0)
+ 357   2          {
+ 358   3            keyword=2;
+ 359   3            keystate = 1;
+ 360   3            while(H1==0);
+ 361   3          }
+ 362   2        }
+ 363   1        else if(H2 == 0)
+ 364   1        {
+C51 COMPILER V9.60.0.0   MAIN                                                              04/01/2022 15:56:17 PAGE 7   
+
+ 365   2          delayms(5);
+ 366   2          if(H2 == 0)
+ 367   2          {
+ 368   3            keyword=5;
+ 369   3            keystate = 1;
+ 370   3            while(H2==0);
+ 371   3          }
+ 372   2        }
+ 373   1        else if(H3 == 0)
+ 374   1        {
+ 375   2          delayms(5);
+ 376   2          if(H3 == 0)
+ 377   2          {
+ 378   3            keyword=8;
+ 379   3            keystate = 1;
+ 380   3            while(H3==0);
+ 381   3          }
+ 382   2        }
+ 383   1        else if(H4 == 0)
+ 384   1        {
+ 385   2          delayms(5);
+ 386   2          if(H4 == 0)
+ 387   2          {
+ 388   3            Tset[0]=11;
+ 389   3            Tset[1]=11;
+ 390   3            Tset[2]=11;
+ 391   3            Tset[3]=11;
+ 392   3            keycount=0; //从第一位开始亮
+ 393   3            while(H4==0);
+ 394   3          }
+ 395   2        }
+ 396   1        if(keystate == 1)
+ 397   1        {
+ 398   2          if(keycount>4)
+ 399   2          {
+ 400   3            keycount=0;
+ 401   3          }
+ 402   2          keycount++;
+ 403   2        }
+ 404   1      }
+ 405          
+ 406          void Face()
+ 407          {
+ 408   1        if(Interface==0)
+ 409   1        {
+ 410   2          display();
+ 411   2          Tmax_Init=Tmaxtemp;
+ 412   2          Tmin_Init=Tmintemp;//设置温度阈值
+ 413   2          if(Tmintemp<Tmaxtemp)
+ 414   2          {
+ 415   3            P2 = (P2 & 0x1f)| 0x80;
+ 416   3            P0 |= 0xfc;
+ 417   3            L2 = 1;
+ 418   3          }
+ 419   2        }
+ 420   1        else if(Interface==1)
+ 421   1        {
+ 422   2          display_setup();
+ 423   2          if(keycount<5)
+ 424   2          {
+ 425   3            Tset[keycount-1]=keyword;
+ 426   3            Tmaxtemp=Tset[0]*10+Tset[1];
+C51 COMPILER V9.60.0.0   MAIN                                                              04/01/2022 15:56:17 PAGE 8   
+
+ 427   3            Tmintemp=Tset[2]*10+Tset[3];
+ 428   3          }
+ 429   2          if(Tset[3]!=11)
+ 430   2          {
+ 431   3            if(Tmintemp>Tmaxtemp)
+ 432   3            {
+ 433   4              P2 = (P2 & 0x1f)| 0x80;
+ 434   4              P0 |= 0xfc;
+ 435   4              L2 = 0;
+ 436   4            }
+ 437   3          }
+ 438   2          if(Tset[3]==11)
+ 439   2          {
+ 440   3            P2 = (P2 & 0x1f)| 0x80;
+ 441   3            P0 |= 0xfc;
+ 442   3            L2 = 1;
+ 443   3          }
+ 444   2        }
+ 445   1      }
+ 446          void display_setup()
+ 447          {
+ 448   1        display_bit(0,dpnum[10]);
+ 449   1        delayms(1);
+ 450   1        display_bit(1,dpnum[Tset[0]]);
+ 451   1        delayms(1);
+ 452   1        display_bit(2,dpnum[Tset[1]]);
+ 453   1        delayms(1);
+ 454   1        display_bit(3,dpnum[11]);
+ 455   1        delayms(1);
+ 456   1        display_bit(4,dpnum[11]);
+ 457   1        delayms(1);
+ 458   1        display_bit(5,dpnum[10]);
+ 459   1        delayms(1);
+ 460   1        display_bit(6,dpnum[Tset[2]]);
+ 461   1        delayms(1);
+ 462   1        display_bit(7,dpnum[Tset[3]]);
+ 463   1        delayms(1);
+ 464   1        P2 = (P2 & 0x1f) | 0xc0;
+ 465   1        P0 = 0xff;
+ 466   1        P2 = (P2 & 0x1f) | 0xe0;
+ 467   1        P0 = 0xff;
+ 468   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1115    ----
+   CONSTANT SIZE    =     12    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     21       2
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      2    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
